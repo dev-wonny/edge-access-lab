@@ -5,7 +5,7 @@ A small edge security and request inspection playground.
 ## Components
 
 - `origin/`: HTTP origin that returns incoming request headers
-- `worker/`: edge application code (added separately)
+- `worker/`: Access JWT verification, identity HTML and private R2 country flags (see [setup](worker/README.md))
 
 ## Origin endpoint
 

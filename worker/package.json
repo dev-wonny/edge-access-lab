@@ -1,0 +1,15 @@
+{
+  "name": "edge-access-lab-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "check": "wrangler deploy --dry-run",
+    "types": "wrangler types",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": { "jose": "^6.0.0" },
+  "devDependencies": { "wrangler": "4.133.0", "@types/node": "^24.0.0" }
+}

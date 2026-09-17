@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "edge-access-lab",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-16",
+  "account_id": "95b8b003703d6b68e74eabde6fe1eed2",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "tunnel.devwonny.win/secure*", "zone_name": "devwonny.win" }],
+  "vars": {
+    "TEAM_DOMAIN": "https://snowy-sunset-05a3.cloudflareaccess.com",
+    "POLICY_AUD": "7af042483af4ea71f19854b8a1f60ecc6d8f7e6774e359e9eff7f9b0c85b1803"
+  },
+  "r2_buckets": [{ "binding": "FLAGS", "bucket_name": "edge-access-lab-flags" }]
+}
