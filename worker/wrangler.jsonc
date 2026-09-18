@@ -6,10 +6,23 @@
   "account_id": "95b8b003703d6b68e74eabde6fe1eed2",
   "workers_dev": false,
   "preview_urls": false,
-  "routes": [{ "pattern": "tunnel.devwonny.win/secure*", "zone_name": "devwonny.win" }],
+  // 배포 후 해당 주소로 요청이 오면
+  // Cloudflare가 src/index.js의 기본 내보내기 객체를 찾아서
+  // 그 안의 fetch(request, env)를 호출
+  "routes": [
+    {
+      "pattern": "tunnel.devwonny.win/secure*",
+      "zone_name": "devwonny.win"
+    }
+  ],
   "vars": {
     "TEAM_DOMAIN": "https://snowy-sunset-05a3.cloudflareaccess.com",
     "POLICY_AUD": "7af042483af4ea71f19854b8a1f60ecc6d8f7e6774e359e9eff7f9b0c85b1803"
   },
-  "r2_buckets": [{ "binding": "FLAGS", "bucket_name": "edge-access-lab-flags" }]
+  "r2_buckets": [
+    {
+      "binding": "FLAGS",
+      "bucket_name": "edge-access-lab-flags"
+    }
+  ]
 }
