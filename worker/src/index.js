@@ -47,6 +47,7 @@ export function createHandler(resolveKeys = remoteKeys) {
     async fetch(request, env) {
       const { pathname } = new URL(request.url);
       const identityPage = pathname === "/secure" || pathname === "/secure/";
+      // 국가명
       const flagMatch = pathname.match(/^\/secure\/([A-Z]{2})$/);
       if (!identityPage && !flagMatch) return respond("Not found", 404);
 
