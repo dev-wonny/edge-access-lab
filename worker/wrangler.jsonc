@@ -26,5 +26,13 @@
       "binding": "FLAGS",
       "bucket_name": "edge-access-lab-flags"
     }
-  ]
+  ],
+  "observability": {
+    "logs": {
+      // 로그 수집 켜기
+      "enabled": true,
+      // Worker 호출 기록도 자동으로 남기기
+      "invocation_logs": true
+    }
+  }
 }
