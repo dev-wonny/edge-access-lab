@@ -35,10 +35,43 @@ function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (char) => entities[char]);
 }
 
+// 외부 서버의 오류 페이지나 과도하게 큰 응답을 R2에 저장하지 않는다.
+async function readPng(response) {
+  const type = response.headers.get("Content-Type")?.split(";")[0].trim().toLowerCase();
+  if (type !== "image/png" || !response.body) {
+    await response.body?.cancel();
+    return null;
+  }
+
+  const reader = response.body.getReader();
+  const chunks = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > 256 * 1024) return null;
+      chunks.push(value);
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+  }
+
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  const signature = [137, 80, 78, 71, 13, 10, 26, 10];
+  return signature.every((byte, i) => bytes[i] === byte) ? bytes : null;
+}
+
 // 네 코드는 “요청이 오면 무엇을 할지”를 작성했음
 // 서버를 띄우고 요청을 받아 함수를 실행하는 일은 Cloudflare가 맡는 구조
 // Tests supply a local public-key resolver; deployed requests always use Access JWKS.
-export function createHandler(resolveKeys = remoteKeys) {
+export function createHandler(resolveKeys = remoteKeys, fetchFlag = fetch) {
   return {
     // fetch는 Cloudflare가 HTTP 요청을 받았을 때 호출하는 함수
     // 요청을 받아 처리하는 컨트롤러 역할
@@ -123,11 +156,40 @@ export function createHandler(resolveKeys = remoteKeys) {
       }
       try {
         // Cloudflare가 연결해 준 R2 버킷에서 파일 읽기 : env.FLAGS.get(파일이름)
-        const flag = await env.FLAGS.get(`${flagMatch[1]}.png`);
-        if (!flag) return respond(`Flag not available: ${flagMatch[1]}`, 404);
+        const country = flagMatch[1];
+        const key = `${country}.png`;
+        let flag = await env.FLAGS.get(key);
+        if (!flag) {
+          if (country === "XX") return respond("Country not available", 404);
+
+          // 인증 후에만 고정된 출처에 요청한다. 사용자 쿠키/JWT는 전달하지 않는다.
+          const source = await fetchFlag(
+            `https://flagcdn.com/w640/${country.toLowerCase()}.png`,
+            {
+              headers: { Accept: "image/png" },
+              redirect: "error",
+              signal: AbortSignal.timeout(5000),
+            },
+          );
+          if (!source.ok) {
+            await source.body?.cancel();
+            return source.status === 404
+              ? respond(`Flag not available: ${country}`, 404)
+              : respond("Flag source temporarily unavailable", 503);
+          }
+          const bytes = await readPng(source);
+          if (!bytes) return respond("Invalid flag image from source", 502);
+
+          await env.FLAGS.put(key, bytes, {
+            httpMetadata: { contentType: "image/png" },
+          });
+          // 첫 요청도 저장 완료 후 private R2에서 읽은 파일로 응답한다.
+          flag = await env.FLAGS.get(key);
+          if (!flag) return respond("Flag storage temporarily unavailable", 503);
+        }
         return respond(flag.body, 200, "image/png");
       } catch {
-        return respond("Flag storage temporarily unavailable", 503);
+        return respond("Flag temporarily unavailable", 503);
       }
     },
   };
