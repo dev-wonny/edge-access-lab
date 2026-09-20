@@ -1,3 +1,4 @@
+import { log } from "./logging.js";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 
 // Cloudflare Access의 공개키 조회 객체를 발급자별로 재사용한다.
@@ -123,7 +124,7 @@ export function createHandler(resolveKeys = remoteKeys, fetchFlag = fetch) {
 
       // 필요한 Access 설정이 없으면 처리할 수 없다.
       if (!env.TEAM_DOMAIN || !env.POLICY_AUD) {
-        console.error({
+        log.error({
           event: "access_config_missing",
           pathname,
         });
@@ -142,14 +143,11 @@ export function createHandler(resolveKeys = remoteKeys, fetchFlag = fetch) {
         request.headers.get("Cf-Access-Jwt-Assertion") ||
         (cookieToken ? decodeURIComponent(cookieToken) : null);
       // token 결과: null
-      console.log(
-        "Extracted Access JWT : ",
-        token ? `${token.slice(0, 20)}...` : null,
-      );
+      log.info({ event: "access_token_checked", tokenPresent: Boolean(token) });
 
       //이제 브라우저에 쿠키만 심어두면 로컬에서도 401 에러 없이 화면이 정상적으로 열리게 됨
       if (!token) {
-        console.warn({
+        log.warn({
           event: "authentication_missing",
           pathname,
         });
@@ -185,7 +183,7 @@ export function createHandler(resolveKeys = remoteKeys, fetchFlag = fetch) {
           identity.iat <= 0 ||
           Number.isNaN(new Date(identity.iat * 1000).getTime())
         ) {
-          console.warn({
+          log.warn({
             event: "invalid_identity",
             pathname,
           });
@@ -194,7 +192,7 @@ export function createHandler(resolveKeys = remoteKeys, fetchFlag = fetch) {
         }
       } catch {
         // JWT 원문이나 검증 오류의 상세 내용은 기록하지 않는다.
-        console.warn({
+        log.warn({
           event: "authentication_failed",
           pathname,
         });
@@ -202,7 +200,7 @@ export function createHandler(resolveKeys = remoteKeys, fetchFlag = fetch) {
         return respond("Invalid or expired authentication", 403);
       }
 
-      console.log({
+      log.info({
         event: "authentication_verified",
         pathname,
       });
@@ -223,7 +221,7 @@ export function createHandler(resolveKeys = remoteKeys, fetchFlag = fetch) {
             ? detectedCountry
             : "XX";
 
-        console.log({
+        log.info({
           event: "identity_page_returned",
           country,
           status: 200,
@@ -264,7 +262,7 @@ export function createHandler(resolveKeys = remoteKeys, fetchFlag = fetch) {
       };
 
       try {
-        console.log({
+        log.info({
           ...logContext,
           event: "flag_lookup_started",
           stage,
@@ -274,7 +272,7 @@ export function createHandler(resolveKeys = remoteKeys, fetchFlag = fetch) {
         // 먼저 비공개 R2 버킷에서 국기를 찾는다.
         let flag = await env.FLAGS.get(key);
 
-        console.log({
+        log.info({
           ...logContext,
           event: "flag_lookup_result",
           found: Boolean(flag),
@@ -288,7 +286,7 @@ export function createHandler(resolveKeys = remoteKeys, fetchFlag = fetch) {
 
           stage = "download";
 
-          console.log({
+          log.info({
             ...logContext,
             event: "flag_download_started",
             stage,
@@ -308,7 +306,7 @@ export function createHandler(resolveKeys = remoteKeys, fetchFlag = fetch) {
             },
           );
 
-          console.log({
+          log.info({
             ...logContext,
             event: "flag_download_response",
             upstreamStatus: source.status,
@@ -323,7 +321,7 @@ export function createHandler(resolveKeys = remoteKeys, fetchFlag = fetch) {
                 country === "UK"
                   ? " (영국 국기는 'UK' 대신 공식 코드인 'GB'를 사용해 주세요: /secure/GB)"
                   : "";
-              console.warn({
+              log.warn({
                 ...logContext,
                 event: "flag_not_found",
                 message: `해당 국가(${country})의 국기 이미지가 없습니다. 올바른 2자리 ISO 국가 코드(예: KR, US, GB, JP 등)로 요청해 주세요.${hint}`,
@@ -332,7 +330,7 @@ export function createHandler(resolveKeys = remoteKeys, fetchFlag = fetch) {
               return respond(`Flag not available: ${country}${hint}`, 404);
             }
 
-            console.error({
+            log.error({
               ...logContext,
               event: "flag_upstream_error",
               upstreamStatus: source.status,
@@ -347,7 +345,7 @@ export function createHandler(resolveKeys = remoteKeys, fetchFlag = fetch) {
           const bytes = await readPng(source);
 
           if (!bytes) {
-            console.warn({
+            log.warn({
               ...logContext,
               event: "flag_image_invalid",
               stage,
@@ -356,7 +354,7 @@ export function createHandler(resolveKeys = remoteKeys, fetchFlag = fetch) {
             return respond("Invalid flag image from source", 502);
           }
 
-          console.log({
+          log.info({
             ...logContext,
             event: "flag_image_validated",
             sizeBytes: bytes.byteLength,
@@ -371,7 +369,7 @@ export function createHandler(resolveKeys = remoteKeys, fetchFlag = fetch) {
             },
           });
 
-          console.log({
+          log.info({
             ...logContext,
             event: "flag_saved",
             stage,
@@ -382,7 +380,7 @@ export function createHandler(resolveKeys = remoteKeys, fetchFlag = fetch) {
           flag = await env.FLAGS.get(key);
 
           if (!flag) {
-            console.error({
+            log.error({
               ...logContext,
               event: "flag_missing_after_write",
               stage,
@@ -392,7 +390,7 @@ export function createHandler(resolveKeys = remoteKeys, fetchFlag = fetch) {
           }
         }
 
-        console.log({
+        log.info({
           ...logContext,
           event: "flag_returned",
           status: 200,
@@ -402,7 +400,7 @@ export function createHandler(resolveKeys = remoteKeys, fetchFlag = fetch) {
       } catch (error) {
         // 어느 단계에서 어떤 예외가 발생했는지 기록한다.
         // 요청 헤더, JWT, 쿠키는 기록하지 않는다.
-        console.error({
+        log.error({
           ...logContext,
           event: "flag_error",
           stage,

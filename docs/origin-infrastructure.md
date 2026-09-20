@@ -13,7 +13,7 @@
 | 새 도메인 HTTP 요청 전달 | infra/nginx/infiniteloopclub.conf | /etc/nginx/sites-available/infiniteloopclub |
 | 활성화 링크 | 아래 적용 절차 | /etc/nginx/sites-enabled/infiniteloopclub |
 | 기존 도메인 HTTPS 설정 참고본 | infra/nginx/snapshots/edge-access-lab.conf | /etc/nginx/sites-enabled/edge-access-lab |
-| Nginx 로그 수집 | infra/cloudwatch/agent.json | /opt/aws/amazon-cloudwatch-agent/etc/cloudwatch-agent.json |
+| Nginx 및 앱 파일 로그 수집 | infra/cloudwatch/agent.json | /opt/aws/amazon-cloudwatch-agent/etc/cloudwatch-agent.json |
 | 헤더 반환 앱 | origin/app.py | systemd 서비스가 실행하는 앱 |
 | 앱 서비스 정의 | origin/header-inspector.service | 실제 설치본은 systemctl cat header-inspector로 확인 |
 | 네임서버 위임 | 이 문서 | 가비아 도메인 관리 |
@@ -127,7 +127,8 @@ sudo cp -a "$cw_backup_dir/agent.json" /opt/aws/amazon-cloudwatch-agent/etc/clou
 sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/etc/cloudwatch-agent.json -s
 ```
 
-수집 범위는 Nginx 두 로그 파일뿐이다. Python 앱의 stdout/systemd journal은 이 설정으로 수집하지 않는다.
+수집 설정은 Nginx 두 로그 파일과 /var/log/header-inspector/app.log를 포함한다.
+앱 로그 수집을 새로 활성화하려면 [앱 로그 배포 절차](app-logging.md)를 적용해야 한다. journal 자체를 수집하는 것은 아니다.
 error.log가 비어 있으면 error 스트림이 아직 나타나지 않을 수 있다.
 timestamp_format을 설정하지 않았으므로 CloudWatch 이벤트 시각과 Nginx 메시지 안의 요청 시각이 다를 수 있다.
 보존 기간은 콘솔에서 7일로 변경하고 결과를 별도 확인한다.
