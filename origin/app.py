@@ -6,8 +6,51 @@
 """
 
 import json
+import logging
+import os
+import sys
+from logging.handlers import RotatingFileHandler
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+
+LOGGER = logging.getLogger("header_inspector")
+
+
+class JsonLogFormatter(logging.Formatter):
+    def format(self, record):
+        entry = {
+            "timestamp": datetime.fromtimestamp(record.created, timezone.utc).isoformat(),
+            "level": record.levelname,
+            "message": record.getMessage(),
+        }
+        if record.exc_info:
+            entry["exception"] = self.formatException(record.exc_info)
+        return json.dumps(entry, ensure_ascii=False)
+
+
+def configure_logging():
+    """Console locally; console + rotating file when APP_LOG_FILE is set."""
+    LOGGER.setLevel(logging.INFO)
+    LOGGER.propagate = False
+    for handler in LOGGER.handlers[:]:
+        handler.close()
+        LOGGER.removeHandler(handler)
+    handlers = [logging.StreamHandler(sys.stdout)]
+    log_file = os.environ.get("APP_LOG_FILE")
+    if log_file:
+        # Parent directory is provisioned by systemd LogsDirectory.
+        handlers.append(RotatingFileHandler(
+            log_file, maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"
+        ))
+    for handler in handlers:
+        handler.setFormatter(JsonLogFormatter())
+        LOGGER.addHandler(handler)
+
+
+class LoggingHTTPServer(ThreadingHTTPServer):
+    def handle_error(self, request, client_address):
+        LOGGER.exception("request_failed peer=%s", client_address[0])
 
 
 class HeaderHandler(BaseHTTPRequestHandler):
@@ -48,22 +91,31 @@ class HeaderHandler(BaseHTTPRequestHandler):
     do_DELETE = handle_request
     do_OPTIONS = handle_request
 
-    def log_message(self, format, *args):
-        """
-        서버 표준 출력 로그 포맷 커스텀: [시간] [클라이언트 IP] [요청 내용]
-        """
-        print(
-            f"{self.log_date_time_string()} "
-            f"{self.client_address[0]} "
-            f"{format % args}"
+    def log_request(self, code="-", size="-"):
+        # Keep headers and query strings out of persistent request logs.
+        LOGGER.info(
+            "request peer=%s method=%s path=%s status=%s size=%s",
+            self.client_address[0], self.command,
+            getattr(self, "path", "").split("?", 1)[0], code, size,
         )
+
+    def log_message(self, format, *args):
+        LOGGER.info("http peer=%s %s", self.client_address[0], format % args)
+
+    def log_error(self, format, *args):
+        # Parser diagnostics may contain raw request lines or secrets.
+        LOGGER.error("http_error peer=%s", self.client_address[0])
 
 
 if __name__ == "__main__":
-    # 다중 스레드를 지원하는 HTTP 서버 인스턴스 생성 (127.0.0.1:8080)
-    server = ThreadingHTTPServer(("127.0.0.1", 8080), HeaderHandler)
-    print("Header inspector listening on http://127.0.0.1:8080")
-    
-    # 서버 실행 (종료 시그널 수신 전까지 무한 대기)
-    server.serve_forever()
-
+    configure_logging()
+    try:
+        with LoggingHTTPServer(("127.0.0.1", 8080), HeaderHandler) as server:
+            LOGGER.info("Header inspector listening on http://127.0.0.1:8080")
+            try:
+                server.serve_forever()
+            except KeyboardInterrupt:
+                LOGGER.info("Header inspector stopped")
+    except Exception:
+        LOGGER.exception("server_failed")
+        raise
