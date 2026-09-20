@@ -20,6 +20,9 @@ LOGGER = logging.getLogger("header_inspector")
 class JsonLogFormatter(logging.Formatter):
     def format(self, record):
         entry = {
+            "service": "header-inspector",
+            "runtime": "python",
+            "component": "origin",
             "timestamp": datetime.fromtimestamp(record.created, timezone.utc).isoformat(),
             "level": record.levelname,
             "message": record.getMessage(),

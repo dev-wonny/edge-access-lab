@@ -121,3 +121,36 @@ sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-c
 이 문서 작성 시 로컬 테스트와 unit 정적 검사는 통과했다. EC2 적용 및 CloudWatch 실수신은 배포 후 별도로 확인해야 한다.
 
 참고: [Python logging handlers](https://docs.python.org/3/library/logging.handlers.html).
+
+## 로그 한 줄로 실행 주체 구분
+
+| 로그 발생 주체 | service | runtime | component | 확인 위치 |
+|---|---|---|---|---|
+| Python 앱 | header-inspector | python | origin | CloudWatch /ec2/cloudflare-origin/app 및 journal |
+| JavaScript Worker | edge-access-lab-worker | cloudflare-workers | edge | Cloudflare Workers 로그 또는 wrangler tail |
+| Nginx | 기본 로그 형식 유지 | 해당 없음 | 해당 없음 | CloudWatch /ec2/cloudflare-origin/nginx |
+
+Python JSON formatter와 Worker의 src/logging.js가 공통 식별 필드를 자동 부착한다.
+시작·요청·오류 등 해당 로거를 거치는 모든 로그에서 식별할 수 있다.
+플랫폼 자체가 만드는 실행 오류/시스템 로그는 이 사용자 정의 형식과 다를 수 있다.
+Worker의 기존 event, requestId, stage 등은 유지하며 토큰 앞부분을 출력하던 디버그 로그는 tokenPresent 값으로 바꿨다.
+Worker는 JavaScript로 작성되었지만 Node.js 서버로 실행되는 것은 아니므로 runtime을 cloudflare-workers로 표기한다.
+Worker 로그를 CloudWatch로 전송하도록 바꾼 것은 아니다.
+
+예시:
+```json
+{"service":"header-inspector","runtime":"python","component":"origin","timestamp":"2026-09-20T08:00:00+00:00","level":"INFO","message":"request peer=127.0.0.1 method=GET path=/headers status=200 size=-"}
+```
+```json
+{"service":"edge-access-lab-worker","runtime":"cloudflare-workers","component":"edge","timestamp":"2026-09-20T08:00:00.000Z","level":"INFO","event":"authentication_verified","pathname":"/secure"}
+```
+
+Python은 위 EC2 적용 순서대로 배포한다. Worker 변경은 별도로 로컬 저장소에서:
+```bash
+cd worker
+npm ci
+npm test
+npx wrangler deploy
+npx wrangler tail
+```
+Worker의 인증된 /secure 요청 후 service/runtime을 확인한다.

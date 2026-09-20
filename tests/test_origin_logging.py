@@ -40,6 +40,9 @@ class LoggingTests(unittest.TestCase):
                     conn.close()
                     records = [json.loads(line) for line in path.read_text().splitlines()]
                     self.assertIn("path=/headers status=200", records[-1]["message"])
+                    self.assertEqual(records[-1]["service"], "header-inspector")
+                    self.assertEqual(records[-1]["runtime"], "python")
+                    self.assertEqual(records[-1]["component"], "origin")
                     self.assertIn("request peer=", console.getvalue())
                     self.assertNotIn("query-secret", path.read_text())
                     self.assertNotIn("header-secret", path.read_text())
@@ -64,6 +67,8 @@ class LoggingTests(unittest.TestCase):
                 self.assertEqual(len(list(Path(directory).glob("app.log.*"))), 5)
                 record = json.loads(path.read_text().splitlines()[-1])
                 self.assertEqual(record["level"], "ERROR")
+                self.assertEqual(record["runtime"], "python")
+                self.assertEqual(record["service"], "header-inspector")
                 self.assertIn("RuntimeError: test failure", record["exception"])
 
     def test_local_mode_does_not_require_log_directory(self):
