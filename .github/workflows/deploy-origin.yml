@@ -1,0 +1,29 @@
+name: Deploy Python origin
+
+on:
+  # GitHub Actions 화면에서 직접 실행
+  workflow_dispatch:
+
+permissions:
+  # AWS 인증용 OIDC 토큰 발급 허용
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    # IAM 신뢰 정책에서 허용한 main에서만 실행
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: AWS 역할로 인증
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: github-origin-deploy
+          retry-max-attempts: 2
+
+      - name: 인증된 AWS 계정과 역할 확인
+        run: aws sts get-caller-identity
