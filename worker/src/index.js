@@ -131,15 +131,23 @@ export function createHandler(resolveKeys = remoteKeys, fetchFlag = fetch) {
         return respond("Access configuration missing", 500);
       }
 
+      // 바뀐 코드: 헤더가 없으면 쿠키에서 CF_Authorization을 꺼내옴
       // Cloudflare Access가 전달한 JWT를 읽는다 (헤더 우선, 브라우저 쿠키 지원).
       const cookieToken = request.headers
         .get("Cookie")
         ?.match(/(?:^|;\s*)CF_Authorization=([^;]+)/)?.[1];
+
+      // 기존 코드: 헤더만 확인하고, 쿠키는 열어보지 않음!
       const token =
         request.headers.get("Cf-Access-Jwt-Assertion") ||
         (cookieToken ? decodeURIComponent(cookieToken) : null);
-      console.log("Extracted Access JWT : ", token ? `${token.slice(0, 20)}...` : null);
+      // token 결과: null
+      console.log(
+        "Extracted Access JWT : ",
+        token ? `${token.slice(0, 20)}...` : null,
+      );
 
+      //이제 브라우저에 쿠키만 심어두면 로컬에서도 401 에러 없이 화면이 정상적으로 열리게 됨
       if (!token) {
         console.warn({
           event: "authentication_missing",
