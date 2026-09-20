@@ -318,9 +318,28 @@ export function createHandler(resolveKeys = remoteKeys, fetchFlag = fetch) {
           if (!source.ok) {
             await source.body?.cancel();
 
-            return source.status === 404
-              ? respond(`Flag not available: ${country}`, 404)
-              : respond("Flag source temporarily unavailable", 503);
+            if (source.status === 404) {
+              const hint =
+                country === "UK"
+                  ? " (영국 국기는 'UK' 대신 공식 코드인 'GB'를 사용해 주세요: /secure/GB)"
+                  : "";
+              console.warn({
+                ...logContext,
+                event: "flag_not_found",
+                message: `해당 국가(${country})의 국기 이미지가 없습니다. 올바른 2자리 ISO 국가 코드(예: KR, US, GB, JP 등)로 요청해 주세요.${hint}`,
+              });
+
+              return respond(`Flag not available: ${country}${hint}`, 404);
+            }
+
+            console.error({
+              ...logContext,
+              event: "flag_upstream_error",
+              upstreamStatus: source.status,
+              message: `FlagCDN 서버 응답 오류 (HTTP ${source.status})`,
+            });
+
+            return respond("Flag source temporarily unavailable", 503);
           }
 
           // 다운로드한 파일의 타입·크기·시그니처를 검사한다.
