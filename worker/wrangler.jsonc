@@ -28,11 +28,25 @@
     }
   ],
   "observability": {
+    // logs: “인증 성공”, “R2에 국기 없음”, “다운로드 완료”처럼 코드에서 남긴 기록
     "logs": {
-      // 로그 수집 켜기
+      // Worker 실행 로그와 코드에서 출력한 로그 수집
       "enabled": true,
-      // Worker 호출 기록도 자동으로 남기기
-      "invocation_logs": true
+      // Worker 호출 기록도 자동으로 남기기, 요청마다 자동 생성되는 호출 로그 포함
+      "invocation_logs": true,
+      // 샘플링 비율: 1 = 100%
+      "head_sampling_rate": 1,
+      // 대시보드에서 나중에도 조회할 수 있도록 저장
+      "persist": true
+    },
+    // traces: R2 조회·외부 fetch·R2 저장 같은 작업의 소요 시간과 관계
+    "traces": {
+      // 요청 처리와 외부 호출의 소요 시간 추적
+      "enabled": true,
+      // 요청의 100%를 추적 대상으로 설정
+      "head_sampling_rate": 1,
+      // 트레이스를 대시보드에 저장
+      "persist": true
     }
   }
 }
