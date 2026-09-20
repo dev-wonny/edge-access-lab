@@ -121,7 +121,7 @@ test('missing flag is downloaded, stored privately, and reused on the next reque
   assert.deepEqual(h.writes[0].options.httpMetadata, { contentType: 'image/png' });
   const [url, options] = h.downloads[0];
   assert.equal(url, 'https://flagcdn.com/w640/us.png');
-  assert.equal(options.redirect, 'error');
+  assert.equal(options.redirect, 'manual');
   assert.ok(options.signal instanceof AbortSignal);
   assert.deepEqual([...new Headers(options.headers)], [['accept', 'image/png']]);
 });

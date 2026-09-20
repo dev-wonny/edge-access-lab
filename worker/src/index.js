@@ -111,7 +111,7 @@ export function createHandler(resolveKeys = remoteKeys, fetchFlag = fetch) {
       const flagMatch = pathname.match(/^\/secure\/([A-Z]{2})$/);
 
       if (!identityPage && !flagMatch) {
-        return respond("Not found", 404);
+        return respond("Not found", 404); // 그 외의 모든 경로는 404 반환
       }
 
       // GET 요청만 허용한다.
@@ -131,9 +131,14 @@ export function createHandler(resolveKeys = remoteKeys, fetchFlag = fetch) {
         return respond("Access configuration missing", 500);
       }
 
-      // Cloudflare Access가 전달한 JWT를 읽는다.
-      const token = request.headers.get("Cf-Access-Jwt-Assertion");
-      console.log("Cf-Access-Jwt-Assertion : ", token);
+      // Cloudflare Access가 전달한 JWT를 읽는다 (헤더 우선, 브라우저 쿠키 지원).
+      const cookieToken = request.headers
+        .get("Cookie")
+        ?.match(/(?:^|;\s*)CF_Authorization=([^;]+)/)?.[1];
+      const token =
+        request.headers.get("Cf-Access-Jwt-Assertion") ||
+        (cookieToken ? decodeURIComponent(cookieToken) : null);
+      console.log("Extracted Access JWT : ", token ? `${token.slice(0, 20)}...` : null);
 
       if (!token) {
         console.warn({
@@ -290,7 +295,7 @@ export function createHandler(resolveKeys = remoteKeys, fetchFlag = fetch) {
               headers: {
                 Accept: "image/png",
               },
-              redirect: "error",
+              redirect: "manual",
               signal: AbortSignal.timeout(5000),
             },
           );
