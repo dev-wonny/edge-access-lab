@@ -9,6 +9,8 @@ import json
 import logging
 import os
 import sys
+from pathlib import Path
+from urllib.parse import urlsplit
 from logging.handlers import RotatingFileHandler
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -75,7 +77,38 @@ class HeaderHandler(BaseHTTPRequestHandler):
     모든 HTTP 요청을 수신하여 요청 정보 및 헤더를 JSON으로 응답하는 핸들러 클래스
     """
 
+    def serve_cdn_demo(self):
+        """공개 데모 파일만 캐시한다. URL을 파일 경로로 직접 사용하지 않는다."""
+        path = urlsplit(self.path).path
+        if not (path == "/cdn-demo" or path.startswith("/cdn-demo/")):
+            return False
+        if self.command not in ("GET", "HEAD"):
+            status, body, content_type = 405, b"Method not allowed\n", "text/plain"
+        elif path != "/cdn-demo/cache-v1.svg":
+            status, body, content_type = 404, b"Not found\n", "text/plain"
+        else:
+            try:
+                body = (Path(__file__).parent / "static/cdn-demo/cache-v1.svg").read_bytes()
+                status, content_type = 200, "image/svg+xml"
+            except OSError:
+                LOGGER.exception("cdn_demo_read_failed")
+                status, body, content_type = 503, b"Asset unavailable\n", "text/plain"
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        # 브라우저 60초, 공유 CDN 캐시 300초. 오류 응답은 캐시하지 않는다.
+        self.send_header("Cache-Control", "public, max-age=60, s-maxage=300" if status == 200 else "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        if status == 405:
+            self.send_header("Allow", "GET, HEAD")
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(body)
+        return True
+
     def handle_request(self):
+        if self.serve_cdn_demo():
+            return
         # 1. 요청 메타데이터 및 헤더 목록 추출
         payload = {
             "method": self.command,  # HTTP 메서드 (GET, POST 등)
@@ -93,15 +126,19 @@ class HeaderHandler(BaseHTTPRequestHandler):
 
         # 3. HTTP 응답 헤더 전송 (200 OK, JSON Content-Type)
         self.send_response(200)
+        # 요청 헤더에는 사용자별 정보가 있으므로 공유 캐시에 저장하지 않는다.
+        self.send_header("Cache-Control", "private, no-store")
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
 
         # 4. JSON 바디 응답 전송
-        self.wfile.write(body)
+        if self.command != "HEAD":
+            self.wfile.write(body)
 
     # HTTP 서버가 메서드에 맞는 do_GET/do_POST 등을 호출하면 같은 함수가 실행된다.
-    # /headers 전용 경로 분기는 없다. 아래 메서드는 다른 경로에서도 요청 정보를 반환한다.
+    # 공개 CDN 데모 외 경로는 기존처럼 요청 정보를 반환한다.
+    do_HEAD = handle_request
     do_GET = handle_request
     do_POST = handle_request
     do_PUT = handle_request
@@ -151,3 +188,4 @@ if __name__ == "__main__":
         # 서버 기동/실행 실패를 기록하고 예외를 다시 발생시켜 systemd도 실패를 알게 한다.
         LOGGER.exception("server_failed")
         raise
+
