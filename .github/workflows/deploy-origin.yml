@@ -85,7 +85,6 @@ jobs:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
           role-session-name: github-origin-deploy
-          allowed-account-ids: "614099836907"
           retry-max-attempts: 2
 
       - name: 인증된 AWS 계정과 역할 확인
