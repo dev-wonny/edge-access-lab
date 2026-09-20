@@ -1,92 +1,181 @@
 name: Deploy Python origin
 
 on:
-  # Actions 화면의 Run workflow 버튼으로 직접 실행
+  # main에 아래 파일들이 반영되면 자동 실행
+  push:
+    branches: [main]
+    paths:
+      - "origin/**"
+      - "tests/**"
+      - ".github/workflows/deploy-origin.yml"
+
+  # Actions 화면에서 수동 실행도 가능
   workflow_dispatch:
 
 permissions:
-  # AWS 인증에 사용할 GitHub OIDC 토큰 발급 허용
   id-token: write
   contents: read
 
+# 배포가 겹치지 않도록 순서대로 실행
+concurrency:
+  group: deploy-python-origin
+  cancel-in-progress: false
+
 jobs:
   deploy:
-    # IAM에서 허용한 main 브랜치에서만 실행
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 15
+
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+      EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+      AWS_PAGER: ""
 
     steps:
       - name: 필수 설정값 확인
-        env:
-          AWS_REGION: ${{ vars.AWS_REGION }}
-          AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
-          EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
         run: |
-          # 변수가 비어 있으면 해당 변수 이름과 함께 실패 처리
-          : "${AWS_REGION:?Repository variable AWS_REGION을 등록해주세요}"
-          : "${AWS_ROLE_ARN:?Repository variable AWS_ROLE_ARN을 등록해주세요}"
-          : "${EC2_INSTANCE_ID:?Repository variable EC2_INSTANCE_ID를 등록해주세요}"
-
-          echo "필수 설정값이 등록되어 있습니다."
-
-      - name: AWS 신뢰 정책과 비교할 식별자 확인
-        # 토큰 원문과 서명은 출력하지 않는다.
-        # IAM 신뢰 정책에 필요한 sub와 aud만 출력한다.
-        run: |
-          python3 - <<'PY'
-          import os
-          import json
-          import base64
-          import urllib.parse
-          import urllib.request
-
-          # GitHub가 제공하는 OIDC 토큰 발급 주소
-          parts = urllib.parse.urlsplit(
-              os.environ["ACTIONS_ID_TOKEN_REQUEST_URL"]
-          )
-          query = urllib.parse.parse_qsl(
-              parts.query, keep_blank_values=True
-          )
-          query = [(key, value) for key, value in query if key != "audience"]
-          query.append(("audience", "sts.amazonaws.com"))
-
-          url = urllib.parse.urlunsplit(
-              parts._replace(query=urllib.parse.urlencode(query))
-          )
-
-          # GitHub 실행 환경의 인증값으로 OIDC 토큰 요청
-          request = urllib.request.Request(
-              url,
-              headers={
-                  "Authorization":
-                      "Bearer " + os.environ["ACTIONS_ID_TOKEN_REQUEST_TOKEN"]
-              },
-          )
-
-          with urllib.request.urlopen(request, timeout=15) as response:
-              token = json.load(response)["value"]
-
-          # 식별자 확인을 위해 JWT payload만 디코딩한다.
-          # 실제 토큰 검증과 역할 사용 허용 여부 판단은 AWS가 수행한다.
-          payload = token.split(".")[1]
-          payload += "=" * (-len(payload) % 4)
-          claims = json.loads(base64.urlsafe_b64decode(payload))
-
-          print("sub:", claims["sub"])
-          print("aud:", claims["aud"])
-          PY
+          : "${AWS_REGION:?AWS_REGION 변수가 필요합니다}"
+          : "${AWS_ROLE_ARN:?AWS_ROLE_ARN 변수가 필요합니다}"
+          : "${EC2_INSTANCE_ID:?EC2_INSTANCE_ID 변수가 필요합니다}"
 
       - name: AWS 역할로 인증
-        # 고정된 버전의 공식 AWS 인증 Action 사용
-        # GitHub OIDC 토큰을 AWS 임시 자격 증명으로 교환
-        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502
+        uses: aws-actions/configure-aws-credentials@v6.3.0
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
           role-session-name: github-origin-deploy
           retry-max-attempts: 2
 
-      - name: 인증된 AWS 계정과 역할 확인
-        # 인증 성공 시 계정 번호와 사용 중인 역할 ARN 출력
-        run: aws sts get-caller-identity
+      - name: SSM으로 EC2 배포 실행
+        id: send
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # 이 파일의 내용은 GitHub 실행 환경이 아니라 EC2에서 실행된다.
+          cat > remote-deploy.sh <<'REMOTE'
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          # 기존 타이머와 중복 실행되는 상황을 방지한다.
+          if systemctl is-active --quiet origin-auto-deploy.timer; then
+            echo "기존 origin-auto-deploy.timer를 먼저 꺼주세요."
+            exit 1
+          fi
+
+          # 이전에 EC2에 설치한 배포 스크립트가 있는지 확인한다.
+          test -x /usr/local/bin/origin-auto-deploy
+
+          # Git 작업은 저장소 소유자인 ubuntu 사용자로 실행한다.
+          # 기존 스크립트가 main 조회 → 테스트 → 코드 반영을 수행한다.
+          # origin 코드가 변경됐으면 Python 재시작과 응답 확인도 수행한다.
+          runuser -u ubuntu -- /usr/local/bin/origin-auto-deploy
+
+          # 기존 스크립트가 배포를 건너뛴 경우도 있으므로
+          # 실제 반영된 커밋을 별도로 확인한다.
+          runuser -u ubuntu -- bash <<'VERIFY'
+          set -euo pipefail
+          cd /home/ubuntu/edge-access-lab
+
+          current=$(git rev-parse HEAD)
+          target=$(git rev-parse refs/remotes/origin/main)
+          failed=/home/ubuntu/.local/state/origin-auto-deploy/failed
+
+          if [[ -f "$failed" && "$(cat "$failed")" == "$target" ]]; then
+            echo "이 커밋은 이전 배포에 실패했습니다. 원인을 확인해주세요."
+            exit 1
+          fi
+
+          if [[ "$current" != "$target" ]]; then
+            echo "배포 미완료: 현재=$current 대상=$target"
+            exit 1
+          fi
+
+          echo "EC2에 반영된 커밋: $current"
+          VERIFY
+
+          # 코드 반영 여부와 별도로 현재 서버 상태를 확인한다.
+          systemctl is-active --quiet header-inspector
+
+          curl --fail --silent --show-error --max-time 5 \
+            -o /dev/null \
+            -w 'Python 응답: HTTP %{http_code}\n' \
+            http://127.0.0.1:8080/headers
+
+          echo "Python origin 배포 확인 완료"
+          REMOTE
+
+          # 여러 줄 명령을 안전한 JSON으로 변환한다.
+          # SSM 기본 셸 대신 Bash로 실행되도록 감싼다.
+          python3 - <<'PY'
+          import json
+          import pathlib
+          import shlex
+
+          script = pathlib.Path("remote-deploy.sh").read_text()
+          parameters = {
+              "commands": ["bash -c " + shlex.quote(script)],
+              "executionTimeout": ["360"],
+          }
+          pathlib.Path("ssm-parameters.json").write_text(
+              json.dumps(parameters)
+          )
+          PY
+
+          command_id=$(aws ssm send-command \
+            --document-name AWS-RunShellScript \
+            --instance-ids "$EC2_INSTANCE_ID" \
+            --parameters file://ssm-parameters.json \
+            --timeout-seconds 60 \
+            --comment "GitHub Actions Python origin deployment" \
+            --query 'Command.CommandId' \
+            --output text)
+
+          echo "command_id=$command_id" >> "$GITHUB_OUTPUT"
+          echo "SSM 명령 ID: $command_id"
+
+      - name: EC2 실행 결과 확인
+        env:
+          COMMAND_ID: ${{ steps.send.outputs.command_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # 명령 접수만으로 성공 처리하지 않고 실제 완료를 기다린다.
+          for attempt in $(seq 1 100); do
+            if aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$EC2_INSTANCE_ID" \
+              --output json > result.json 2> invocation-error.txt; then
+
+              status=$(jq -r '.Status' result.json)
+              echo "EC2 실행 상태: $status"
+
+              case "$status" in
+                Success)
+                  jq -r '.StandardOutputContent, .StandardErrorContent' result.json
+                  exit 0
+                  ;;
+                Pending|InProgress|Delayed)
+                  ;;
+                *)
+                  jq -r '.StandardOutputContent, .StandardErrorContent' result.json
+                  echo "배포 실패: $status"
+                  exit 1
+                  ;;
+              esac
+            else
+              # 명령 전송 직후에는 조회 결과가 아직 없을 수 있다.
+              if ! grep -q InvocationDoesNotExist invocation-error.txt; then
+                cat invocation-error.txt
+                exit 1
+              fi
+            fi
+
+            sleep 5
+          done
+
+          echo "결과 대기 시간이 초과됐습니다. SSM에서 명령 상태를 확인해주세요."
+          exit 1
