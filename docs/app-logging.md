@@ -14,8 +14,12 @@ stdout에도 같은 내용을 출력하므로 journalctl -u header-inspector로 
 기존 journal 기록을 이전하는 기능은 아니며 배포 이후의 앱 로그부터 수집한다.
 APP_LOG_FILE이 없는 로컬 실행은 파일 없이 콘솔에만 출력한다.
 
-로그에는 직접 연결한 peer IP, 메서드, 쿼리를 제외한 경로, 응답 상태를 남긴다.
-HTTP 응답의 헤더 반환 동작은 유지하지만 요청 헤더와 쿼리 문자열은 요청 로그에 복사하지 않는다.
+요청 로그의 message는 기존 순서인 [시간] [클라이언트 IP] [요청 내용]을 유지한다.
+기본 log_request가 log_message를 호출하며 요청 행(메서드, 쿼리를 포함한 경로, HTTP 버전), 상태 코드와 크기를 기록한다.
+예: [20/Sep/2026 08:00:00] [127.0.0.1] ["GET /headers?demo=1 HTTP/1.1" 200 -]
+시간은 기존 log_date_time_string()의 서버 로컬 시간이고, JSON timestamp는 UTC다.
+클라이언트 IP는 기존 self.client_address[0]로, Nginx를 통하면 127.0.0.1이다.
+요청 헤더 전체를 로그에 복사하지 않는다. HTTP 응답의 헤더 반환 동작은 그대로 유지한다.
 request 기록은 send_response 시점의 상태이며 응답 본문 전송 완료를 보증하지 않는다. 처리 중 예외는 별도 ERROR 기록이다.
 기동 실패 로그는 로깅 초기화가 완료된 경우 파일에도 남는다. 파일 권한 등 초기화 자체가 실패하면 journal에서 확인한다.
 
@@ -139,7 +143,7 @@ Worker 로그를 CloudWatch로 전송하도록 바꾼 것은 아니다.
 
 예시:
 ```json
-{"service":"header-inspector","runtime":"python","component":"origin","timestamp":"2026-09-20T08:00:00+00:00","level":"INFO","message":"request peer=127.0.0.1 method=GET path=/headers status=200 size=-"}
+{"service":"header-inspector","runtime":"python","component":"origin","timestamp":"2026-09-20T08:00:00+00:00","level":"INFO","message":"[20/Sep/2026 08:00:00] [127.0.0.1] [\"GET /headers HTTP/1.1\" 200 -]"}
 ```
 ```json
 {"service":"edge-access-lab-worker","runtime":"cloudflare-workers","component":"edge","timestamp":"2026-09-20T08:00:00.000Z","level":"INFO","event":"authentication_verified","pathname":"/secure"}

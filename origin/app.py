@@ -94,20 +94,22 @@ class HeaderHandler(BaseHTTPRequestHandler):
     do_DELETE = handle_request
     do_OPTIONS = handle_request
 
-    def log_request(self, code="-", size="-"):
-        # Keep headers and query strings out of persistent request logs.
+    def log_message(self, format, *args):
+        """기존 요청 로그 순서 유지: [시간] [클라이언트 IP] [요청 내용]."""
         LOGGER.info(
-            "request peer=%s method=%s path=%s status=%s size=%s",
-            self.client_address[0], self.command,
-            getattr(self, "path", "").split("?", 1)[0], code, size,
+            "[%s] [%s] [%s]",
+            self.log_date_time_string(),
+            self.client_address[0],
+            format % args,
         )
 
-    def log_message(self, format, *args):
-        LOGGER.info("http peer=%s %s", self.client_address[0], format % args)
-
     def log_error(self, format, *args):
-        # Parser diagnostics may contain raw request lines or secrets.
-        LOGGER.error("http_error peer=%s", self.client_address[0])
+        LOGGER.error(
+            "[%s] [%s] [%s]",
+            self.log_date_time_string(),
+            self.client_address[0],
+            format % args,
+        )
 
 
 if __name__ == "__main__":

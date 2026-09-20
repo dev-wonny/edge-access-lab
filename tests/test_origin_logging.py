@@ -21,7 +21,7 @@ class LoggingTests(unittest.TestCase):
             handler.close()
             app.LOGGER.removeHandler(handler)
 
-    def test_real_request_flushes_file_and_console_without_headers_or_query(self):
+    def test_real_request_preserves_time_ip_request_in_file_and_console(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "app.log"
             console = io.StringIO()
@@ -32,19 +32,19 @@ class LoggingTests(unittest.TestCase):
                 thread.start()
                 try:
                     conn = http.client.HTTPConnection(*server.server_address, timeout=3)
-                    conn.request("GET", "/headers?secret=query-secret",
+                    conn.request("GET", "/headers?demo=1",
                                  headers={"Authorization": "Bearer header-secret"})
                     response = conn.getresponse()
                     self.assertEqual(response.status, 200)
-                    self.assertEqual(json.loads(response.read())["path"], "/headers?secret=query-secret")
+                    self.assertEqual(json.loads(response.read())["path"], "/headers?demo=1")
                     conn.close()
                     records = [json.loads(line) for line in path.read_text().splitlines()]
-                    self.assertIn("path=/headers status=200", records[-1]["message"])
+                    self.assertRegex(records[-1]["message"], r'^\[.+\] \[127\.0\.0\.1\] \["GET /headers\?demo=1 HTTP/1\.1" 200 -\]$')
                     self.assertEqual(records[-1]["service"], "header-inspector")
                     self.assertEqual(records[-1]["runtime"], "python")
                     self.assertEqual(records[-1]["component"], "origin")
-                    self.assertIn("request peer=", console.getvalue())
-                    self.assertNotIn("query-secret", path.read_text())
+                    self.assertEqual(json.loads(console.getvalue().splitlines()[-1])["message"], records[-1]["message"])
+                    self.assertIn("/headers?demo=1", records[-1]["message"])
                     self.assertNotIn("header-secret", path.read_text())
                 finally:
                     server.shutdown()
