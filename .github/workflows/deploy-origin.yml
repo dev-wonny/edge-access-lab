@@ -104,21 +104,6 @@ jobs:
             -w 'Python 응답: HTTP %{http_code}\n' \
             http://127.0.0.1:8080/headers
 
-          # CDN에 공개할 파일이 실제 배포된 파일과 같은지, 캐시 헤더가 맞는지 검사한다.
-          # 이 요청은 EC2 내부의 원본 검사이며 CDN HIT 검증은 별도로 수행한다.
-          python3 - <<'CHECK_ASSET'
-          from pathlib import Path
-          from urllib.request import urlopen
-
-          expected = Path("/home/ubuntu/edge-access-lab/origin/static/cdn-demo/cache-v1.svg").read_bytes()
-          with urlopen("http://127.0.0.1:8080/cdn-demo/cache-v1.svg", timeout=5) as response:
-              assert response.status == 200
-              assert response.headers.get("Content-Type") == "image/svg+xml"
-              assert response.headers.get("Cache-Control") == "public, max-age=60, s-maxage=300"
-              assert response.read() == expected, "배포된 이미지가 Git 파일과 다릅니다."
-          print("CDN 데모 원본 파일·캐시 헤더 확인 완료")
-          CHECK_ASSET
-
           echo "Python origin 배포 확인 완료"
           REMOTE
 
@@ -194,4 +179,3 @@ jobs:
 
           echo "결과 대기 시간이 초과됐습니다. SSM에서 명령 상태를 확인해주세요."
           exit 1
-

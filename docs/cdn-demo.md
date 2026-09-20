@@ -1,70 +1,43 @@
-# CDN 캐시 실험
+# 기존 R2 국기로 CDN 캐시 확인하기
 
-## 목표와 요청 경로
+새 이미지를 EC2나 R2에 업로드하지 않는다. `edge-access-lab-flags` 버킷의 기존 `KR.png`를 Worker의 `/cdn-demo/KR.png`에서 공개하고 Cache API로 재사용한다. R2 버킷 자체는 비공개다.
 
-공개 SVG 파일을 반복 조회해 Cloudflare 캐시 HIT일 때 원본 요청이 줄어드는지 확인한다.
-URL: `https://tunnel.devwonny.win/cdn-demo/cache-v1.svg`
+| 경로 | 인증 | 저장소/캐시 |
+| --- | --- | --- |
+| `/secure/KR` | 기존 Access 인증 유지 | R2, 응답 `private, no-store` |
+| `/cdn-demo/KR.png` | 공개 | Cache API HIT이면 바로 반환, MISS이면 기존 R2 객체 조회 |
+| `/cdn-demo/DE.png` 등 | 공개 대상 아님 | 404, R2 조회 없음 |
 
-- MISS: Cloudflare → 기존 Tunnel → 원본 서비스 → 이미지 응답을 캐시에 저장.
-- HIT: Cloudflare가 캐시에서 응답. 원본의 Nginx/Python까지 요청을 전달하지 않는다.
-- `/secure*`는 기존 Worker·Access 경로다. 이 데모는 해당 경로 밖에 있다.
-- R2 객체 저장과 CDN HTTP 응답 캐싱은 별개다. 이 실험은 R2를 사용하지 않는다.
+공개 경로는 `KR.png` 한 개만 허용한다. R2에 없으면 캐시하지 않는 404를 반환하며 외부 다운로드나 R2 쓰기는 하지 않는다. 쿠키·JWT·쿼리는 캐시 키에 포함하지 않고, 사용자별 정보도 응답에 넣지 않는다. GET과 HEAD만 허용한다.
 
-## Git으로 관리하는 범위
+## GitHub에서 배포
 
-`origin/static/cdn-demo/cache-v1.svg`는 인증 정보가 없는 고정 공개 파일이다.
-Python은 정확히 이 URL만 파일로 매핑한다. 사용자 URL을 파일 경로로 변환하지 않는다.
-응답은 `public, max-age=60, s-maxage=300`: 브라우저 60초, 공유 캐시 300초의 신선도다.
-실제 캐시 보존 기간은 퇴출이나 별도 Cloudflare 규칙에 따라 달라질 수 있다.
-오류와 허용하지 않은 메서드는 `no-store`, 기존 헤더 조회 응답은 `private, no-store`다.
-이미지가 변경되면 새 파일명과 허용 URL로 버전을 올리거나 해당 URL 캐시를 제거한다.
+PR을 main에 병합하면 기존 Cloudflare Builds가 worker 테스트와 배포를 실행한다. `worker/wrangler.jsonc`에 추가한 `tunnel.devwonny.win/cdn-demo/*` Route도 배포된다. 이 변경에는 Python, Nginx, EC2 설정 변경이 없다.
 
-기존 `origin/**`, `tests/**` 변경 감지로 main 병합 시 Actions가 SSM 배포를 실행한다.
-설치된 배포 스크립트가 후보 커밋 테스트 후 origin 변경을 감지하여 Python을 재시작한다.
-추가된 배포 검사는 원본의 이미지 바이트와 캐시 헤더를 확인한다.
-Nginx 참고용 설정이나 Certbot 인증서 설정을 덮어쓰지 않으며 수동 EC2 작업이 필요 없다.
+Access의 기존 보호 범위 `/secure`, `/secure/*`는 유지한다. 공개 데모 경로까지 Access로 보호하면 Cache API 동작을 기대할 수 없다. 다른 전역 Access 정책이 있다면 실제 공개 경로에 적용되는지 확인한다.
 
-## 로컬 검증
+## 실제 배포 후 확인
+
+아래 명령을 두 번 실행한다. 브라우저 자체 캐시를 피하기 위해 curl을 사용한다.
 
 ```bash
-python3 -m unittest discover -s tests -v
+curl -sS -D - -o /dev/null 'https://tunnel.devwonny.win/cdn-demo/KR.png'
+curl -sS -D - -o /dev/null 'https://tunnel.devwonny.win/cdn-demo/KR.png'
 ```
 
-## 배포 후 Mac에서 CDN 확인
+- `X-Demo-Cache: MISS`: 조회 시 캐시가 없어 R2를 읽고 캐시 저장을 시도했다.
+- `X-Demo-Cache: HIT`: Cache API에서 이미지를 읽었다. 해당 요청은 R2를 읽지 않는다.
+- `X-Demo-Cache: BYPASS`: 캐시 조회/저장 중 예외가 발생했지만 R2 이미지로 응답했다.
+- `Cache-Control: public, max-age=60, s-maxage=300`: 브라우저 60초, 공유 캐시 300초 정책이다.
 
-아래 URL을 바꾸지 않고 여러 번 GET한다. `curl`은 브라우저 캐시를 사용하지 않는다.
+`X-Demo-Cache`는 이 코드에서 설정한 진단 헤더다. `CF-Cache-Status`로 이 코드의 Cache API HIT 여부를 판정하지 않는다. 저장 호출이 완료되어도 실제 저장을 보장하지 않으므로 다음 요청의 HIT로 확인한다. 캐시는 데이터센터별이며 만료·퇴거·다른 데이터센터 도착 시 다시 MISS가 날 수 있다. 쿼리 변경은 이 데모의 캐시를 비우지 않는다. R2 객체를 바꿨다면 기존 캐시 TTL이 지난 후 확인한다.
 
-```bash
-for attempt in 1 2 3; do
-  curl --fail --silent --show-error --max-time 15 \
-    -D - -o /dev/null \
-    -w 'TTFB=%{time_starttransfer}s total=%{time_total}s\n' \
-    'https://tunnel.devwonny.win/cdn-demo/cache-v1.svg'
-done
-```
+## 로그로 확인
 
-확인: HTTP 200, `Content-Type: image/svg+xml`, `CF-Cache-Status`, `Age`, `CF-Ray`.
-캐시가 비어 있으면 MISS, 같은 캐시에서 다시 제공하면 HIT가 기대된다.
-이미 다른 요청이 채웠으면 첫 요청도 HIT일 수 있고, 다른 데이터센터에서는 MISS일 수 있다.
-`CF-Ray` 끝의 데이터센터 코드를 함께 기록한다. 1회 속도 차이만으로 개선을 단정하지 않는다.
+Workers Observability에서 `cdn_cache_lookup`의 HIT/MISS를 확인한다. MISS에는 `cdn_r2_get`, 저장 시도 완료에는 `cdn_cache_store`가 기록된다. `requestId`로 한 요청을 묶는다. HIT에도 Worker는 실행되지만 R2 조회는 건너뛴다. 이 경로는 EC2로 가지 않으므로 Nginx/CloudWatch에 요청 로그가 없는 것이 정상이다.
 
-CloudWatch의 Nginx access 로그에서 `/cdn-demo/cache-v1.svg`를 검색한다.
-Tunnel이 Python에 직접 연결된 경우에는 Python 로그에서 확인한다.
-동일 시간대에 MISS는 원본 기록이 생기고 HIT는 추가 원본 기록이 없는지 비교한다.
-배포 원본 검사는 Python 로그에 별도로 남으므로 시간대를 구분한다.
+## 검증 범위
 
-## HIT가 나오지 않을 때
+`cd worker && npm test`로 MISS→HIT, R2 조회 횟수, GET/HEAD, 공개 객체 제한, 오류 비캐싱, 캐시 장애 우회, 기존 인증 정책을 검증한다. 테스트 캐시는 모의 구현이므로 Cloudflare 실제 HIT 확인은 병합·배포 후 위 명령으로 진행한다.
 
-- JSON이면 정적 파일 배포 또는 요청 경로가 잘못된 것이다. 강제로 캐시하지 않는다.
-- 302/로그인 화면이면 Access가 데모 경로까지 보호하는지 확인한다.
-- `private`/`no-store`이면 원본이나 중간 프록시가 캐시 헤더를 바꾸는지 확인한다.
-- Cloudflare Development Mode, 기존 Cache Rules의 Bypass, Set-Cookie 여부를 확인한다.
-- `infiniteloopclub.cloud`의 DNS-only 경로는 이 실험 대상이 아니다.
-- 전체 사이트 Cache Everything이나 개인화 응답의 캐시 강제 규칙을 추가하지 않는다.
-
-공식 기준: https://developers.cloudflare.com/cache/concepts/default-cache-behavior/
-
-## 발표 증거
-
-배포 성공 로그, 같은 URL의 MISS/HIT 헤더, 같은 시간대 원본 로그를 함께 캡처한다.
-이 PR의 로컬 테스트는 응답 동작만 검증한다. 실제 Cloudflare HIT는 병합·배포 후 확인해야 한다.
+참고: [Cloudflare Cache API 문서](https://developers.cloudflare.com/workers/runtime-apis/cache/) — 데이터센터별 캐시, Access 제약, cache.put 반환 동작.
