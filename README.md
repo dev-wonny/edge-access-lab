@@ -24,3 +24,7 @@ curl -H "X-Demo: edge-access-lab" http://localhost:8080/headers
 - [기존 Certbot HTTPS 설정 참고본](infra/nginx/snapshots/edge-access-lab.conf)
 
 `origin/nginx.conf`는 초기 HTTP 설정이며 현재 EC2의 Certbot 적용 설정과 다릅니다.
+
+## 앱 로그 수집
+
+[앱 로그 → CloudWatch 적용 및 확인](docs/app-logging.md). Git pull 후 서비스와 Agent 설정 적용이 필요합니다.
