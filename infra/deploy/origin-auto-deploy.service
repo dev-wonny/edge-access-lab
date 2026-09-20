@@ -1,0 +1,11 @@
+[Unit]
+Description=Check main and deploy Python origin
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+ExecStart=/bin/bash /usr/local/bin/origin-auto-deploy
+TimeoutStartSec=300
