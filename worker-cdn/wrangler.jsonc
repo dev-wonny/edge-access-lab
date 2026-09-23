@@ -16,5 +16,12 @@
             "pattern": "tunnel.devwonny.win/cdn/*",
             "zone_name": "devwonny.win"
         }
-    ]
+    ],
+    // worker 로그 활성화 : /flag-cdn-demo/production/observability/invocations
+    "observability": {
+        "logs": {
+            "enabled": true,
+            "invocation_logs": true
+        }
+    }
 }
