@@ -1,5 +1,9 @@
 # EC2 Python 자동 배포
 
+현재 GitHub Actions의 `Deploy Python origin`은 아래 배포 스크립트를 SSM으로 실행한다.
+이 방식과 systemd timer를 동시에 사용하지 않는다. 아래 timer 설치는 이전 방식의 기록이다.
+Nginx는 [별도의 Actions 워크플로](tls-mode-demo.md)에서 적용·복원한다.
+
 EC2의 systemd timer가 약 1분마다 GitHub main을 확인한다. Webhook 방식이 아니므로 빌드/네트워크 시간을 더한 지연이 있다. SSH 인바운드를 추가로 열지 않는다. Worker의 Cloudflare Builds와 독립적으로 동작한다.
 
 ## 범위와 전제

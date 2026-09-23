@@ -1,16 +1,24 @@
 # EC2 설정과 요청 흐름
 
+## 2026-09-23 HTTPS 및 배포 흐름 갱신
+
+`infiniteloopclub.cloud`와 `www.infiniteloopclub.cloud`의 Certbot 인증서가 발급됐고,
+루트 직접 HTTPS와 www Cloudflare 프록시 경유 `/headers`에서 200을 확인했다.
+저장소의 `infra/nginx/infiniteloopclub.conf`는 이 HTTPS 설정으로 갱신했다.
+현재 적용·복원은 [GitHub Actions Nginx 배포 안내](tls-mode-demo.md)를 따른다.
+아래 2026-09-20 HTTP/DNS only 내용과 수동 설치 절차는 당시의 기록이다.
+
 ## 기록 범위와 확인 기준
 
 2026-09-20 사용자가 제공한 nginx -T, DNS 조회, curl 응답 및 CloudWatch 화면을 기준으로 작성했다.
-이 문서는 현재 실습 설정의 기록이며 AWS/Cloudflare 상태를 자동 동기화하는 Terraform은 아니다.
-이 커밋 자체는 EC2에 배포하지 않는다.
+이하 내용은 해당 날짜의 실습 기록이며 AWS/Cloudflare 상태를 자동 동기화하는 Terraform은 아니다.
+현재 Nginx 배포는 별도 Actions 수동 실행으로 진행한다.
 
 ## 어디에서 무엇을 관리하는가
 
 | 구성 | 저장소 | 서버/콘솔 위치 |
 |---|---|---|
-| 새 도메인 HTTP 요청 전달 | infra/nginx/infiniteloopclub.conf | /etc/nginx/sites-available/infiniteloopclub |
+| 새 도메인 HTTPS 요청 전달 (9/23 갱신) | infra/nginx/infiniteloopclub.conf | /etc/nginx/sites-available/infiniteloopclub |
 | 활성화 링크 | 아래 적용 절차 | /etc/nginx/sites-enabled/infiniteloopclub |
 | 기존 도메인 HTTPS 설정 참고본 | infra/nginx/snapshots/edge-access-lab.conf | /etc/nginx/sites-enabled/edge-access-lab |
 | Nginx 및 앱 파일 로그 수집 | infra/cloudwatch/agent.json | /opt/aws/amazon-cloudwatch-agent/etc/cloudwatch-agent.json |
