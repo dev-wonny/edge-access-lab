@@ -16,6 +16,7 @@ function remoteKeys(issuer) {
 }
 
 // 공통 HTTP 응답을 만든다.
+// 이미지 응답에 캐시 저장 금지를 붙이는 곳이 이 Worker의 respond() 함수
 function respond(body, status = 200, type = "text/plain; charset=utf-8") {
   return new Response(body, {
     status,
@@ -95,6 +96,7 @@ async function readPng(response) {
   return signature.every((byte, i) => bytes[i] === byte) ? bytes : null;
 }
 
+// 0. Access로 보호된 Worker에서는 Cache API를 사용할 수 없다
 // 서버를 띄우고 요청을 받아 함수를 실행하는 일은 Cloudflare가 맡는 구조
 // 테스트에서는 공개키 조회와 외부 다운로드 함수를 교체할 수 있다.
 // 실제 배포에서는 remoteKeys와 기본 fetch를 사용한다.
@@ -157,6 +159,7 @@ export function createHandler(resolveKeys = remoteKeys, fetchFlag = fetch) {
 
       let identity;
 
+      // 1. Worker가 로그인 JWT를 검증
       try {
         // 서명, 발급자, 대상 앱, 만료 등을 검증한다.
         // exp, iat, email 필드는 반드시 존재해야 한다.
@@ -268,6 +271,7 @@ export function createHandler(resolveKeys = remoteKeys, fetchFlag = fetch) {
           stage,
         });
 
+        // 2. env.FLAGS.get("KR.png")로 R2에서 이미지를 읽음
         // Cloudflare가 연결해 준 R2 버킷에서 파일 읽기 : env.FLAGS.get(파일이름)
         // 먼저 비공개 R2 버킷에서 국기를 찾는다.
         let flag = await env.FLAGS.get(key);
@@ -292,7 +296,7 @@ export function createHandler(resolveKeys = remoteKeys, fetchFlag = fetch) {
             stage,
           });
 
-          // R2에 없으면 고정된 외부 주소에서 다운로드한다.
+          // 3. R2에 없으면 고정된 외부 주소에서 다운로드한다.
           // 사용자 쿠키나 JWT는 외부 서버에 전달하지 않는다.
           // 다운로드 제한 시간은 5초다.
           const source = await fetchFlag(
@@ -396,6 +400,7 @@ export function createHandler(resolveKeys = remoteKeys, fetchFlag = fetch) {
           status: 200,
         });
 
+        // 4. 이미지를 반환하면서 캐시 저장 금지 헤더를 붙임 -> 다음 요청에도 Worker는 R2를 다시 읽음
         return respond(flag.body, 200, "image/png");
       } catch (error) {
         // 어느 단계에서 어떤 예외가 발생했는지 기록한다.
