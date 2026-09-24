@@ -10,7 +10,7 @@ A small edge security and request inspection playground.
 |---|---|---|---|
 | 1, 2 | 헤더 에코 (Cloudflare 프록시 경유) | https://origin.devwonny.win/ | 요청 헤더 JSON. `Cf-Connecting-Ip`, `Cf-Ray`, `Cf-Ipcountry` 포함 |
 | 3 | Full (Strict) + 외부 발급 인증서 | 원본 Nginx에 Let's Encrypt 인증서 적용 | 정상 응답. 인증서 불일치 실험은 [TLS 모드 비교](docs/tls-mode-demo.md) 참고 |
-| 4 | Rate Limiting | https://origin.devwonny.win/rate-limit-test (같은 IP 기준 10초에 5회 초과 시 10초 차단) | 초과 시 `429`와 `Retry-After` 헤더 |
+| 4 | Rate Limiting | https://tunnel.devwonny.win/rate-limit-test (같은 IP 기준 10초에 5회 초과 시 10초 차단, 존 전체 적용) | 초과 시 `429`와 `Retry-After` 헤더 |
 | 5 | Cloudflare Tunnel | https://tunnel.devwonny.win/ | 헤더 에코 JSON에 `Cf-Warp-Tag-Id` 헤더 포함 (Tunnel 경유 증거) |
 | 6, 7 | Zero Trust SSO + 경로 접근 제한 | https://tunnel.devwonny.win/secure | Access 로그인 화면으로 이동. `@cloudflare.com` 이메일은 One-time PIN으로 로그인 |
 | 7 | 원본 IP 직접 접근 차단 | `curl -m 5 https://54.180.6.126/` | 타임아웃 (Security Group이 Cloudflare IP 대역만 허용) |
@@ -26,8 +26,8 @@ curl -s https://origin.devwonny.win/ | grep -i -A1 -E 'cf-connecting-ip|cf-ray|c
 # Tunnel 경유 확인 (Cf-Warp-Tag-Id 헤더)
 curl -s https://tunnel.devwonny.win/ | grep -i -A1 'cf-warp-tag-id'
 
-# Rate Limiting: 200이 이어지다가 429로 바뀜
-for i in $(seq 1 12); do curl -s -o /dev/null -w "%{http_code} " https://origin.devwonny.win/rate-limit-test; done; echo
+# Rate Limiting: 같은 연결로 20회 → 1~5는 200, 6번째부터 429
+curl --http2 -sS -o /dev/null -w '%{http_code} %header{cf-ray}\n' 'https://tunnel.devwonny.win/rate-limit-test?demo=[1-20]'
 
 # 원본 IP 직접 접근: 타임아웃 (Cloudflare 우회 불가)
 curl -m 5 -k https://54.180.6.126/ || echo "blocked (timeout)"
