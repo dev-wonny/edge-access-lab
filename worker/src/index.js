@@ -1,4 +1,5 @@
 import { log } from "./logging.js";
+import { serveCdnDemo } from "./cdn-demo.js";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 
 // Cloudflare Access의 공개키 조회 객체를 발급자별로 재사용한다.
@@ -100,13 +101,19 @@ async function readPng(response) {
 // 서버를 띄우고 요청을 받아 함수를 실행하는 일은 Cloudflare가 맡는 구조
 // 테스트에서는 공개키 조회와 외부 다운로드 함수를 교체할 수 있다.
 // 실제 배포에서는 remoteKeys와 기본 fetch를 사용한다.
-export function createHandler(resolveKeys = remoteKeys, fetchFlag = fetch) {
+export function createHandler(resolveKeys = remoteKeys, fetchFlag = fetch, resolveCache = () => caches.default) {
   return {
     // Cloudflare가 HTTP 요청을 받으면 호출한다.
     // request: URL, 메서드, 헤더 등 요청 정보
     // env: Wrangler 환경변수와 R2 바인딩
     async fetch(request, env) {
       const { pathname } = new URL(request.url);
+
+      // 공개하기로 정한 KR.png 한 개만 인증 없이 제공한다.
+      // /secure의 인증 및 private, no-store 정책은 그대로 유지한다.
+      if (pathname === "/cdn-demo/KR.png") {
+        return serveCdnDemo(request, env, resolveCache);
+      }
 
       const identityPage = pathname === "/secure" || pathname === "/secure/";
 

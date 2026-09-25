@@ -11,6 +11,7 @@
   // Cloudflare가 src/index.js의 기본 내보내기 객체를 찾아서
   // 그 안의 fetch(request, env)를 호출
   "routes": [
+    { "pattern": "tunnel.devwonny.win/cdn-demo/*", "zone_name": "devwonny.win" },
     {
       "pattern": "tunnel.devwonny.win/secure*",
       "zone_name": "devwonny.win"
