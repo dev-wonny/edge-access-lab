@@ -3,21 +3,27 @@ name: Deploy Nginx TLS lab
 on:
   pull_request:
     paths:
-      - "infra/nginx/infiniteloopclub.conf"
-      - "infra/deploy/deploy-nginx.sh"
+      - "infra/nginx/*.conf"
+      - "infra/deploy/deploy-*.sh"
       - "infra/tests/**"
       - ".github/workflows/deploy-nginx.yml"
   push:
     branches: [main]
     paths:
-      - "infra/nginx/infiniteloopclub.conf"
-      - "infra/deploy/deploy-nginx.sh"
+      - "infra/nginx/*.conf"
+      - "infra/deploy/deploy-*.sh"
       - "infra/tests/**"
       - ".github/workflows/deploy-nginx.yml"
   workflow_dispatch:
     inputs:
+      site:
+        description: "infiniteloopclub = TLS 비교 실험, devwonny = 루트/www HTTPS"
+        type: choice
+        required: true
+        default: infiniteloopclub
+        options: [infiniteloopclub, devwonny]
       certificate_mode:
-        description: "normal = 정상 인증서 복원, mismatch = 이름 불일치 실험"
+        description: "normal = 정상 인증서, mismatch = infiniteloopclub 전용 이름 불일치 실험"
         type: choice
         required: true
         default: normal
@@ -37,6 +43,7 @@ jobs:
       - name: 배포 및 복구 테스트
         run: |
           bash -n infra/deploy/deploy-nginx.sh
+          bash -n infra/deploy/deploy-devwonny.sh
           python3 -m unittest discover -s infra/tests -v
 
   deploy:
@@ -57,6 +64,7 @@ jobs:
       AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
       EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
       CERTIFICATE_MODE: ${{ inputs.certificate_mode }}
+      DEPLOY_SITE: ${{ inputs.site }}
       AWS_PAGER: ""
     steps:
       - uses: actions/checkout@v6
@@ -87,8 +95,19 @@ jobs:
           import shlex
 
           mode = os.environ["CERTIFICATE_MODE"]
+          site = os.environ["DEPLOY_SITE"]
           if mode not in {"normal", "mismatch"}:
               raise SystemExit("Unknown certificate mode")
+          if site == "infiniteloopclub":
+              deploy_script = "infra/deploy/deploy-nginx.sh"
+              nginx_config = "infra/nginx/infiniteloopclub.conf"
+              arguments = [mode]
+          elif site == "devwonny" and mode == "normal":
+              deploy_script = "infra/deploy/deploy-devwonny.sh"
+              nginx_config = "infra/nginx/devwonny.conf"
+              arguments = []
+          else:
+              raise SystemExit("Unknown site or unsupported mismatch mode for devwonny")
           # 인증서/개인키 없이 스크립트와 Nginx 설정 두 파일만 전송한다.
           script = [
               "set -euo pipefail",
@@ -97,14 +116,14 @@ jobs:
               'cd "$work"',
               "mkdir -p infra/deploy infra/nginx",
           ]
-          for name in ("infra/deploy/deploy-nginx.sh", "infra/nginx/infiniteloopclub.conf"):
+          for name in (deploy_script, nginx_config):
               encoded = base64.b64encode(pathlib.Path(name).read_bytes()).decode()
               script.append(f"printf %s {shlex.quote(encoded)} | base64 --decode > {shlex.quote(name)}")
           script.append("export DEPLOY_REVISION=" + shlex.quote(os.environ["GITHUB_SHA"]))
-          script.append("bash infra/deploy/deploy-nginx.sh " + shlex.quote(mode))
+          script.append(shlex.join(["bash", deploy_script, *arguments]))
           parameters = {
               "commands": ["bash -c " + shlex.quote("\n".join(script))],
-              "executionTimeout": ["180"],
+              "executionTimeout": ["600"],
           }
           pathlib.Path("ssm-parameters.json").write_text(json.dumps(parameters))
           PY
@@ -113,10 +132,10 @@ jobs:
             --instance-ids "$EC2_INSTANCE_ID" \
             --parameters file://ssm-parameters.json \
             --timeout-seconds 60 \
-            --comment "Nginx TLS lab: $CERTIFICATE_MODE" \
+            --comment "Nginx: $DEPLOY_SITE / $CERTIFICATE_MODE" \
             --query 'Command.CommandId' --output text)
           echo "command_id=$command_id" >> "$GITHUB_OUTPUT"
-          echo "SSM command: $command_id; mode=$CERTIFICATE_MODE; revision=$GITHUB_SHA"
+          echo "SSM command: $command_id; site=$DEPLOY_SITE; mode=$CERTIFICATE_MODE; revision=$GITHUB_SHA"
 
       - name: EC2 실행 결과 확인
         env:
@@ -124,7 +143,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for attempt in $(seq 1 70); do
+          for attempt in $(seq 1 130); do
             if aws ssm get-command-invocation \
               --command-id "$COMMAND_ID" --instance-id "$EC2_INSTANCE_ID" \
               --output json > result.json 2> invocation-error.txt; then
@@ -133,7 +152,7 @@ jobs:
               case "$status" in
                 Success)
                   jq -r '.StandardOutputContent, .StandardErrorContent' result.json
-                  echo "Nginx: $CERTIFICATE_MODE / $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+                  echo "Nginx: $DEPLOY_SITE / $CERTIFICATE_MODE / $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
                   exit 0
                   ;;
                 Pending|InProgress|Delayed) ;;
