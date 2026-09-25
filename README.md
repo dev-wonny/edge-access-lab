@@ -61,6 +61,7 @@ curl -H "X-Demo: edge-access-lab" http://localhost:8080/headers
 [실제 설정과 요청 흐름, 적용·복구·검증 방법](docs/origin-infrastructure.md)
 
 - [루트/www HTTPS Nginx 설정](infra/nginx/infiniteloopclub.conf)
+- [devwonny.win 루트/www 인증서 및 HTTPS 배포](docs/devwonny-https.md)
 - [GitHub Actions로 Nginx 적용 및 Full / Full (strict) 비교](docs/tls-mode-demo.md)
 - [CloudWatch Agent 로그 수집 설정](infra/cloudwatch/agent.json)
 - [기존 Certbot HTTPS 설정 참고본](infra/nginx/snapshots/edge-access-lab.conf)
@@ -68,7 +69,8 @@ curl -H "X-Demo: edge-access-lab" http://localhost:8080/headers
 `origin/nginx.conf`는 초기 HTTP 설정이며 현재 EC2의 Certbot 적용 설정과 다릅니다.
 
 Nginx 변경은 **Actions → Deploy Nginx TLS lab → Run workflow**에서 적용합니다.
-`normal`은 정상 인증서, `mismatch`는 인증서 이름 불일치 실험입니다.
+`site: infiniteloopclub`에서 `normal`은 정상 인증서, `mismatch`는 인증서 이름 불일치 실험입니다.
+`site: devwonny`, `certificate_mode: normal`은 루트/www용 인증서를 DNS-01로 발급하고 별도 사이트에 적용합니다.
 인증서/개인키는 EC2에 유지하며 SSH 접속 없이 SSM으로 배포합니다.
 
 ## 앱 로그 수집

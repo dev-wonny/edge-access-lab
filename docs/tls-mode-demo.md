@@ -30,7 +30,8 @@ Cloudflare의 Full / Full (strict) 선택은 Cloudflare 콘솔에서 한다.
 
 먼저 이 변경을 `main`에 병합한다. PR과 push에서는 배포 스크립트 테스트만 실행한다.
 실제 EC2 변경은 **Actions → Deploy Nginx TLS lab → Run workflow**에서만 실행한다.
-브랜치는 `main`을 선택한다. EC2에서 스크립트를 따로 설치하거나 `git pull`할 필요가 없다.
+브랜치는 `main`, `site`는 `infiniteloopclub`을 선택한다. EC2에서 스크립트를 따로 설치하거나 `git pull`할 필요가 없다.
+`devwonny` 루트/www의 별도 배포는 [해당 안내](devwonny-https.md)를 따른다.
 
 1. `certificate_mode: normal`로 실행하고 `deploy` 작업의 성공을 확인한다.
 2. Cloudflare에서 `infiniteloopclub.cloud` → **SSL/TLS → Configure** → **Full**을 선택한다.
