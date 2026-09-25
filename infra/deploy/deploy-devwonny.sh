@@ -49,7 +49,9 @@ import sys
 
 root = Path(sys.argv[1])
 config = configparser.ConfigParser(interpolation=None)
-config.read(root / "renewal/origin.devwonny.win.conf")
+# Certbot uses ConfigObj: certificate metadata precedes [renewalparams].
+# Give those top-level fields a section for the standard-library parser.
+config.read_string("[certificate]\n" + (root / "renewal/origin.devwonny.win.conf").read_text())
 params = config["renewalparams"]
 if params.get("authenticator") != "dns-cloudflare":
     raise SystemExit("The existing origin certificate must use dns-cloudflare")

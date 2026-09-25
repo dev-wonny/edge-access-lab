@@ -74,7 +74,10 @@ class DevwonnyDeployTests(unittest.TestCase):
         self.credentials.write_text("test fixture; no credentials")
         self.renewal = renewal / "origin.devwonny.win.conf"
         self.renewal.write_text(
-            "[renewalparams]\nauthenticator = dns-cloudflare\n"
+            "# Existing Certbot ConfigObj file, including top-level metadata\n"
+            "version = 2.9.0\narchive_dir = /etc/letsencrypt/archive/origin.devwonny.win\n"
+            "cert = /etc/letsencrypt/live/origin.devwonny.win/cert.pem\n"
+            "\n[renewalparams]\nauthenticator = dns-cloudflare\n"
             f"dns_cloudflare_credentials = {self.credentials}\n"
             "dns_cloudflare_propagation_seconds = 60\n"
             "account = test-account\nserver = https://acme.example/directory\n"
