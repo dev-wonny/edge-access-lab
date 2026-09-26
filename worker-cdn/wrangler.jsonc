@@ -10,8 +10,13 @@
             "bucket_name": "edge-access-lab-flags"
         }
     ],
-    // 라우팅 설정
+    // 공개 국기 요청을 EC2의 헤더 앱 대신 이 Worker로 전달한다.
+    // 각 호스트의 DNS 레코드는 Cloudflare Proxied 상태여야 한다.
     "routes": [
+        {
+            "pattern": "infiniteloopclub.cloud/cdn/*",
+            "zone_name": "infiniteloopclub.cloud"
+        },
         {
             "pattern": "tunnel.devwonny.win/cdn/*",
             "zone_name": "devwonny.win"
