@@ -40,13 +40,15 @@ curl -s -o /dev/null -w "%{http_code} -> %{redirect_url}\n" https://tunnel.devwo
 
 | 구성 | 목적 |
 |---|---|
-| `infiniteloopclub.cloud` 루트 A 레코드 (DNS only) | Proxied와 DNS only 비교용. DNS 조회 시 원본 IP가 그대로 노출되지만, Security Group이 Cloudflare IP 대역만 허용하므로 직접 접속은 차단됨 |
-| https://tunnel.devwonny.win/cdn/KR.png | Workers Cache API 동작 확인용 공개 데모 (`flag-cdn-demo` Worker). 공개 대상은 `KR.png` 한 장으로 제한하며, 두 번째 요청부터 `X-Demo-Cache: HIT` |
+| `infiniteloopclub.cloud` 루트 A 레코드 (Proxied) | `/cdn/*`는 `flag-cdn-demo` Worker로, 그 외 경로는 원본으로 전달한다. DNS only로 바꾸면 Worker Route를 거치지 않는다. |
+| https://infiniteloopclub.cloud/cdn/KR.png | Workers Cache API 공개 데모. 비공개 R2의 `KR.png` 한 장만 공개하며, 같은 데이터센터의 캐시에 있으면 `X-Demo-Cache: HIT`. [배포 및 확인](worker-cdn/README.md) |
+| https://tunnel.devwonny.win/cdn/KR.png | 같은 `flag-cdn-demo` Worker의 기존 주소. 호스트별 캐시 키는 별도다. |
 
 ## Components
 
 - `origin/`: HTTP origin that returns incoming request headers
 - `worker/`: Access JWT verification, identity HTML and private R2 country flags (see [setup](worker/README.md))
+- `worker-cdn/`: 공개 `/cdn/KR.png` 이미지와 Cache API 데모 (see [setup](worker-cdn/README.md))
 
 ## Origin endpoint
 
