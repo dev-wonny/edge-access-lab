@@ -1,0 +1,72 @@
+name: Deploy CDN Worker
+
+on:
+  pull_request:
+    paths:
+      - "worker-cdn/**"
+      - "worker/package.json"
+      - "worker/package-lock.json"
+      - ".github/workflows/deploy-cdn-worker.yml"
+  push:
+    branches: [main]
+    paths:
+      - "worker-cdn/**"
+      - "worker/package.json"
+      - "worker/package-lock.json"
+      - ".github/workflows/deploy-cdn-worker.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+      - name: 고정 버전 Wrangler 설치
+        run: npm ci --prefix worker
+      - name: 인증 정보 없이 배포 파일 검증
+        run: ./worker/node_modules/.bin/wrangler deploy --config worker-cdn/wrangler.jsonc --dry-run
+
+  deploy:
+    # PR에는 토큰을 전달하지 않고, main 반영 또는 main 수동 실행만 배포한다.
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    concurrency:
+      group: deploy-flag-cdn-demo
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+      - name: 고정 버전 Wrangler 설치
+        run: npm ci --prefix worker
+      - name: CDN Worker 및 Route 배포
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          # 계정 ID는 비밀값이 아니며 기존 worker/wrangler.jsonc와 동일하다.
+          CLOUDFLARE_ACCOUNT_ID: "95b8b003703d6b68e74eabde6fe1eed2"
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo '::error::GitHub Actions Secret CLOUDFLARE_API_TOKEN을 등록해주세요. worker-cdn/README.md 참고.'
+            exit 1
+          fi
+          ./worker/node_modules/.bin/wrangler deploy --config worker-cdn/wrangler.jsonc
+      - name: 공개 주소가 JSON 대신 PNG로 응답하는지 확인
+        run: python3 worker-cdn/verify-deployment.py
