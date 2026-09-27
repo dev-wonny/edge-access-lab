@@ -1,3 +1,51 @@
+/*
+## curl
+curl -sS -D - -o /dev/null https://tunnel.devwonny.win/cdn/KR.png
+
+## curl 첫번째 결과
+HTTP/2 200 
+date: Sun, 27 Sep 2026 00:02:40 GMT
+content-type: image/png
+content-length: 2456
+cache-control: public, max-age=300
+x-content-type-options: nosniff
+x-demo-cache: MISS
+report-to: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=tNgUo92WtJrFPf4zR5X4oAEpqJi73iVDFFFIabXkEY26%2BFEkgawrt9%2BifCu27aziNlaiPqRwKswu%2FqDw0DF9Iu9eJF4e0tpUTqnpcg2hgljUDRpUvFtyfhc%2FZBAUHLY%2FJr7eT45R"}]}
+nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
+server: cloudflare
+cf-ray: a4163da55c3906b9-HKG
+alt-svc: h3=":443"; ma=86400
+
+
+## curl 두번째 결과
+HTTP/2 200 
+date: Sun, 27 Sep 2026 00:03:37 GMT
+content-type: image/png
+content-length: 2456
+cf-ray: a4163f102b1461ec-HKG
+cf-cache-status: HIT
+accept-ranges: bytes
+age: 57
+cache-control: public, max-age=14400
+last-modified: Sun, 27 Sep 2026 00:02:40 GMT
+server: cloudflare
+x-content-type-options: nosniff
+x-demo-cache: HIT
+report-to: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=dqECvXSvvb4jMpkcBa%2FpWfbkLGAc%2BWfcfGUcqsd%2B%2BjDVoWhB5d%2FRudLX%2FpIOGBBnoebvnS9JPcjsGza9Z4k3hUB3YXsOpmMLJhdnxFbXeljeQzVdF1JHWIyac%2FYWq6IF5XW5lRLX"}]}
+nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
+alt-svc: h3=":443"; ma=86400
+
+
+| 항목 | 첫 번째 | 두 번째 | 의미 |
+|---|---|---|---|
+| 시각 | 00:02:40 | 00:03:37 | 57초 간격 |
+| 처리 위치 | HKG | HKG | 둘 다 홍콩 |
+| `x-demo-cache` | MISS | HIT | Worker의 캐시 조회 결과 |
+| `age` | 없음 | 57 | 캐시된 응답의 나이 |
+| `max-age` | 300초 | 14400초 | 클라이언트에 전달된 캐시 정책이 바뀜 |
+
+
+ */
 const TTL_SECONDS = 300;
 
 function errorResponse(message, status, extraHeaders = {}) {
@@ -90,7 +138,7 @@ export default {
        */
       headers: {
         "Content-Type": "image/png",
-        "Cache-Control": `public, max-age=${TTL_SECONDS}`,
+        "Cache-Control": `public, max-age=${TTL_SECONDS}`, //300초 동안 캐시하도록 응답 생성
         "X-Content-Type-Options": "nosniff",
       },
     });
