@@ -101,7 +101,11 @@ async function readPng(response) {
 // 서버를 띄우고 요청을 받아 함수를 실행하는 일은 Cloudflare가 맡는 구조
 // 테스트에서는 공개키 조회와 외부 다운로드 함수를 교체할 수 있다.
 // 실제 배포에서는 remoteKeys와 기본 fetch를 사용한다.
-export function createHandler(resolveKeys = remoteKeys, fetchFlag = fetch, resolveCache = () => caches.default) {
+export function createHandler(
+  resolveKeys = remoteKeys,
+  fetchFlag = fetch,
+  resolveCache = () => caches.default,
+) {
   return {
     // Cloudflare가 HTTP 요청을 받으면 호출한다.
     // request: URL, 메서드, 헤더 등 요청 정보
@@ -115,6 +119,7 @@ export function createHandler(resolveKeys = remoteKeys, fetchFlag = fetch, resol
         return serveCdnDemo(request, env, resolveCache);
       }
 
+      // ① 브라우저에서 /secure 접속
       const identityPage = pathname === "/secure" || pathname === "/secure/";
 
       // /secure/DE, /secure/US처럼 대문자 두 글자 경로를 받는다.
@@ -147,6 +152,13 @@ export function createHandler(resolveKeys = remoteKeys, fetchFlag = fetch, resol
         .get("Cookie")
         ?.match(/(?:^|;\s*)CF_Authorization=([^;]+)/)?.[1];
 
+      // ② Cloudflare Access가 로그인 요구
+      // ③ 사용자가 설정된 방식으로 인증 : ③ 사용자가 설정된 방식으로 인증
+      // ④ Access가 접근 정책 확인 : “이 이메일이 허용된 사용자인가?”
+      // ⑤ Access가 JWT 생성 + 개인키로 서명 : 이메일, 발급자, 대상 앱, 만료 시각 등을 포함
+      // ⑥ 브라우저에 CF_Authorization 쿠키로 저장
+      // ⑦ 이후 요청에서 Access가 토큰을 확인하고, Worker에 Cf-Access-Jwt-Assertion 헤더로 전달
+
       // 기존 코드: 헤더만 확인하고, 쿠키는 열어보지 않음!
       const token =
         request.headers.get("Cf-Access-Jwt-Assertion") ||
@@ -166,10 +178,13 @@ export function createHandler(resolveKeys = remoteKeys, fetchFlag = fetch, resol
 
       let identity;
 
-      // 1. Worker가 로그인 JWT를 검증
+      // ⑧ Worker가 공개키로 JWT 검증
       try {
         // 서명, 발급자, 대상 앱, 만료 등을 검증한다.
         // exp, iat, email 필드는 반드시 존재해야 한다.
+
+        // Cloudflare Access 가 만든 JWT 검증
+        // await jwtVerify(token, 공개키, 검증조건);
         const { payload } = await jwtVerify(
           token,
           resolveKeys(env.TEAM_DOMAIN),
@@ -215,6 +230,7 @@ export function createHandler(resolveKeys = remoteKeys, fetchFlag = fetch, resol
         pathname,
       });
 
+      // ⑨ 검증된 이메일을 화면에 표시
       // /secure에서는 인증된 사용자 정보를 HTML로 반환한다.
       if (identityPage) {
         // JWT 발급 시각이다.
