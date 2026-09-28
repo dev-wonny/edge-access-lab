@@ -12,7 +12,29 @@ EC2, Tunnel, Nginx를 거치지 않는다. `/cdn/`용 Nginx 설정이나 EC2 파
 
 이 Worker는 `worker/`의 `edge-access-lab` Worker 및 `/cdn-demo/*` 데모와 별도다. `worker/`만 배포하면 여기의 Route는 반영되지 않는다.
 
-## Mac에서 배포
+## GitHub Actions 자동 배포
+
+`.github/workflows/deploy-cdn-worker.yml`의 **Deploy CDN Worker**가 이 Worker를 배포한다.
+
+- PR: 고정 버전 Wrangler로 `--dry-run` 검증만 실행한다. 배포 토큰은 제공하지 않는다.
+- main 병합: `worker-cdn/**`, Wrangler 의존성 파일 또는 이 워크플로가 변경되면 검증 후 자동 배포한다.
+- 수동 재실행: Actions → Deploy CDN Worker → Run workflow → main.
+- 배포 후 두 공개 주소의 HTTP 200, image/png, PNG 시그니처, X-Demo-Cache를 확인한다. HTTP 200 JSON은 실패로 처리한다. 데이터센터별 캐시이므로 HIT만 요구하지 않고 정상 MISS도 허용한다.
+
+### 최초 1회 인증 설정
+
+1. Cloudflare의 API Tokens에서 **Edit Cloudflare Workers** 템플릿으로 토큰을 만든다. 계정은 이 프로젝트 계정으로 제한하고, Route 권한은 `devwonny.win`, `infiniteloopclub.cloud` 두 존에 부여한다. Worker 배포 권한과 두 존의 Workers Routes 편집 권한이 필요하다. R2 객체는 런타임 FLAGS 바인딩으로 읽으며 이 워크플로는 R2에 업로드하지 않는다.
+2. GitHub 저장소 → Settings → Secrets and variables → Actions → New repository secret에서 **CLOUDFLARE_API_TOKEN**으로 저장한다. 토큰 값은 코드·문서·채팅에 넣지 않는다.
+3. 계정 ID는 워크플로에 기존 프로젝트 값으로 지정되어 있어 추가 Secret이 필요 없다.
+4. 이 설정을 병합 전에 끝내면 병합 시 자동 배포된다. 병합 후 등록했다면 main에서 Run workflow로 실행한다.
+
+Cloudflare Builds에도 **동일한 flag-cdn-demo**가 연결돼 있다면 중복 배포되지 않도록 배포 담당을 GitHub Actions 하나로 정한다. 별도 `edge-access-lab` Worker의 Builds는 이 워크플로 대상이 아니다.
+
+Secret 관리 권한이 없는 GitHub 연결에서는 토큰을 대신 등록할 수 없다. 워크플로 파일만 추가한 상태는 실제 배포 완료가 아니며, Actions의 deploy 및 응답 검증 성공까지 확인한다.
+
+공식 문서: [Workers GitHub Actions](https://developers.cloudflare.com/workers/ci-cd/external-cicd/github-actions/), [Worker 배포 및 Route 권한](https://developers.cloudflare.com/workers/authorization/).
+
+## Mac에서 수동 배포 (선택)
 
 PR 병합 후 로컬 저장소 루트에서 실행한다. 작업 중인 변경이 있다면 먼저 별도 커밋으로 보관한다.
 
